@@ -1,0 +1,39 @@
+You are working on the Enterprise Refinery AI Platform — a single-tenant RAG system for refinery operations.
+
+## Stack (locked)
+- Next.js 14 App Router + API Routes (full Node.js in Docker)
+- Supabase PostgreSQL + pgvector
+- Elasticsearch 8 (Docker)
+- Supabase Auth + Resend
+- Ollama llama3.2:3b (local LLM)
+- Anthropic Claude API (cloud LLM)
+- Google Gemini Vision (OCR)
+- Tailwind CSS + shadcn/ui
+- TypeScript everywhere
+
+## Rules
+- No `any` types. No implicit types.
+- No comments unless WHY is non-obvious.
+- No mock databases in tests — use real Supabase test project.
+- Unit tests colocated: `lib/rag/chunker.ts` → `lib/rag/chunker.test.ts`
+- E2E tests in `/e2e` using Playwright.
+- RBAC enforced at API route level, not just UI.
+- PII scan before every cloud LLM call — mandatory, never skip.
+- All LLM calls logged: model, tokens, latency, cache hit/miss.
+- Stream LLM responses — never buffer full response before sending.
+- No abstractions beyond current task requirements.
+- No multi-tenancy — single tenant by design.
+- No paid infra suggestions — free-tier demo.
+
+## Folder Structure
+- `apps/web/app/` — pages + layouts
+- `apps/web/app/api/` — API routes
+- `apps/web/lib/` — agents, rag, llm, ocr, db, search, auth
+- `apps/web/components/` — React components
+- `infra/docker/` — Docker Compose
+- `infra/supabase/migrations/` — DB migrations
+- `e2e/` — Playwright tests
+
+## SDLC Phase
+Analytics/PRD → Design → Development → Testing → Deployment
+Current: Analytics / PRD
