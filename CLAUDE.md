@@ -19,18 +19,38 @@ This is a tech capability demo — free-tier infra, local Docker.
 - **Styling:** Tailwind CSS + shadcn/ui
 
 ## SDLC Phase (update as we progress)
-Current phase: **Analytics / PRD** → Design → Development → Testing → Deployment
+Current phase: Analytics / PRD → Design → **Development** → Testing → Deployment
 
 ## Coding Rules
 - TypeScript everywhere — no `any`, no implicit types
 - No comments unless the WHY is non-obvious
-- No mock databases in tests — hit real Supabase test project
+- No mock databases in tests — hit real Supabase test project (same project, rolled back after)
 - Unit tests live next to the file: `lib/rag/chunker.ts` → `lib/rag/chunker.test.ts`
 - E2E tests live in `/e2e`
 - All API routes enforce RBAC at the route level, not just in UI
 - PII scan runs before every cloud LLM call — never skip this
 - LLM calls are always logged (model, tokens, latency, cache hit)
 - Stream all LLM responses — never wait for full completion before sending
+- No static/mock data in any API route — every route must read/write real DB
+
+## Logging Rules (mandatory — never skip)
+- Every API request is logged: endpoint, method, user_id, latency_ms, status_code
+- Every LLM call is logged: model, prompt_tokens, completion_tokens, latency_ms, cache_hit, user_id
+- Every agent action is logged: agent_name, input_summary, output_summary, duration_ms, success
+- Every ingestion step is logged: doc_id, step_name, duration_ms, success/error
+- Use `logger.info / logger.warn / logger.error / logger.debug` from `lib/logger.ts` everywhere
+- Logger writes to Supabase `logs` table async (fire-and-forget) + stdout JSON
+- Never use bare `console.log` in production code — always use the logger
+- Log enough context to replay/debug any failure without the original request
+
+## Test Rules (mandatory — tests ship with every feature)
+- Every API route gets an integration test in `route.test.ts` beside it
+- Every lib function with non-trivial logic gets a unit test in `<file>.test.ts`
+- Test framework: Vitest (`npm run test`)
+- Tests must clean up their own data — use `afterEach` to delete rows inserted by the test
+- Never test with hardcoded IDs — always create test data in `beforeEach` and store the ID
+- Test names describe the behaviour: `it('returns 403 when employee tries to access admin route')`
+- CI runs `npm run test` on every PR — a failing test blocks merge
 
 ## File & Folder Conventions
 - `apps/web/app/` — Next.js App Router pages and layouts
