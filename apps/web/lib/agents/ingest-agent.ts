@@ -92,16 +92,29 @@ export async function runIngestAgent(documentId: string, userId: string): Promis
       const { embedding } = await embedText(chunk.content);
 
       // 7b — Upsert into document_chunks (pgvector)
-      const chunkId = `${documentId}_${chunk.chunkIndex}`;
-      await admin.from("document_chunks").upsert({
-        id:          chunkId,
+      // Pass embedding as vector literal string — required for pgvector via PostgREST
+      const vectorLiteral = `[${embedding.join(",")}]`;
+      const { error: upsertErr } = await admin.from("document_chunks").upsert({
         document_id: documentId,
         chunk_index: chunk.chunkIndex,
         content:     chunk.content,
-        embedding:   JSON.stringify(embedding),  // pgvector accepts JSON array
+        embedding:   vectorLiteral,
         page_number: chunk.pageNumber ?? null,
         metadata:    { method, hasPII, chunkIndex: chunk.chunkIndex },
       }, { onConflict: "document_id,chunk_index" });
+
+      if (upsertErr) {
+        throw new Error(`Chunk upsert failed (chunk ${chunk.chunkIndex}): ${upsertErr.message}`);
+      }
+
+      // Stable ID for ES: use the auto-generated UUID query after insert
+      const { data: inserted } = await admin.from("document_chunks")
+        .select("id")
+        .eq("document_id", documentId)
+        .eq("chunk_index", chunk.chunkIndex)
+        .single();
+
+      const chunkId = inserted?.id ?? `${documentId}_${chunk.chunkIndex}`;
 
       // 7c — Index to Elasticsearch (non-fatal if ES is down)
       await tryIndexChunk({

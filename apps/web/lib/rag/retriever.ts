@@ -22,8 +22,11 @@ async function vectorSearch(
   deptId: string | null,
   topK: number,
 ): Promise<RetrievedChunk[]> {
+  // pgvector RPC expects the embedding as a vector literal string
+  const vectorLiteral = `[${queryEmbedding.join(",")}]`;
+
   const { data, error } = await getAdminClient().rpc("match_document_chunks", {
-    query_embedding: queryEmbedding,
+    query_embedding: vectorLiteral,
     match_count:     topK,
     filter_dept_id:  deptId ?? null,
   });
