@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { Icon } from "./ui/icons";
 import { Avatar } from "./ui/avatar";
@@ -15,6 +16,14 @@ const TABS: { id: Tab; label: string; icon: (p: { size: number; sw: number }) =>
   { id: "admin",     label: "Admin",     icon: Icon.admin },
 ];
 
+const ROLE_BADGE: Record<string, string> = {
+  super_admin: "Super Admin",
+  dept_admin:  "Admin",
+  manager:     "Manager",
+  employee:    "Employee",
+  read_only:   "Read Only",
+};
+
 interface TopNavProps {
   tab: Tab;
   setTab: (t: Tab) => void;
@@ -22,8 +31,20 @@ interface TopNavProps {
 }
 
 export function TopNav({ tab, setTab, onBug }: TopNavProps) {
-  const { logout } = useAuth();
+  const { profile, supabase } = useAuth();
+  const router = useRouter();
   const [menu, setMenu] = useState(false);
+
+  const logout = async () => {
+    setMenu(false);
+    await fetch("/api/auth/logout", { method: "POST" });
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  };
+
+  const displayName = profile?.fullName ?? profile?.email ?? "User";
+  const roleLabel   = profile ? (ROLE_BADGE[profile.role] ?? profile.role) : "";
 
   return (
     <header style={{
@@ -49,9 +70,12 @@ export function TopNav({ tab, setTab, onBug }: TopNavProps) {
         </div>
       </div>
 
-      {/* Center tabs */}
+      {/* Center tabs — hide admin tab for non-admins */}
       <nav style={{ flex: 1, minWidth: 0, display: "flex", justifyContent: "center", gap: 2 }}>
-        {TABS.map((t) => {
+        {TABS.filter((t) => {
+          if (t.id === "admin") return profile?.role === "super_admin" || profile?.role === "dept_admin";
+          return true;
+        }).map((t) => {
           const active = tab === t.id;
           return (
             <button key={t.id} onClick={() => setTab(t.id)} className={"navtab" + (active ? " on" : "")}>
@@ -75,12 +99,12 @@ export function TopNav({ tab, setTab, onBug }: TopNavProps) {
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--hover-strong)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
           >
-            <Avatar name="Mara Okonkwo" size={30} />
+            <Avatar name={displayName} size={30} />
             <div style={{ textAlign: "left", lineHeight: 1.25 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text)" }}>Mara Okonkwo</div>
-              <div style={{ fontSize: 11, color: "var(--text-faint)" }}>Operations</div>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text)" }}>{displayName}</div>
+              <div style={{ fontSize: 11, color: "var(--text-faint)" }}>{profile?.departmentName ?? "—"}</div>
             </div>
-            <Badge tone="violet" style={{ marginLeft: 2 }}>Admin</Badge>
+            <Badge tone="violet" style={{ marginLeft: 2 }}>{roleLabel}</Badge>
           </button>
           {menu && (
             <>
@@ -92,7 +116,7 @@ export function TopNav({ tab, setTab, onBug }: TopNavProps) {
                 <MenuItem icon={<Icon.users size={15} />} label="Profile settings" onClick={() => setMenu(false)} />
                 <MenuItem icon={<Icon.shield size={15} />} label="Security" onClick={() => setMenu(false)} />
                 <div className="divider" style={{ margin: "5px 0" }} />
-                <MenuItem icon={<Icon.logout size={15} />} label="Sign out" danger onClick={() => { setMenu(false); logout(); }} />
+                <MenuItem icon={<Icon.logout size={15} />} label="Sign out" danger onClick={logout} />
               </div>
             </>
           )}
