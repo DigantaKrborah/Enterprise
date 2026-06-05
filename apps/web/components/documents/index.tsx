@@ -86,21 +86,32 @@ function UploadZone({ onClose, onUploaded }: { onClose: () => void; onUploaded: 
   const upload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setUploading(true);
-    for (const file of Array.from(files)) {
-      const form = new FormData();
-      form.append("file", file);
-      if (profile?.departmentId) form.append("departmentId", profile.departmentId);
-      const res = await fetch("/api/ingest/upload", { method: "POST", body: form });
-      if (res.ok) {
-        toast({ title: "Upload queued", body: `${file.name} — indexing started.`, tone: "blue", icon: <Icon.upload size={16} /> });
-      } else {
-        const err = await res.json() as { error?: { message?: string } };
-        toast({ title: "Upload failed", body: err.error?.message ?? "Unknown error", tone: "red" });
+    try {
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.append("file", file);
+        if (profile?.departmentId) form.append("departmentId", profile.departmentId);
+        const res = await fetch("/api/ingest/upload", { method: "POST", body: form });
+        if (res.ok) {
+          toast({ title: "Upload queued", body: `${file.name} — indexing started.`, tone: "blue", icon: <Icon.upload size={16} /> });
+        } else {
+          let message = `Server error (${res.status})`;
+          try {
+            const err = await res.json() as { error?: { message?: string } };
+            message = err.error?.message ?? message;
+          } catch {
+            if (res.status === 404) message = "Upload service unavailable — API server not running";
+          }
+          toast({ title: "Upload failed", body: message, tone: "red" });
+        }
       }
+    } catch (err) {
+      toast({ title: "Upload failed", body: err instanceof Error ? err.message : "Network error", tone: "red" });
+    } finally {
+      setUploading(false);
+      onUploaded();
+      onClose();
     }
-    setUploading(false);
-    onUploaded();
-    onClose();
   };
 
   return (
