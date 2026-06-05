@@ -79,7 +79,7 @@ function Dropdown({ label, value, setValue, options }: { label: string; value: s
 
 function UploadZone({ onClose, onUploaded }: { onClose: () => void; onUploaded: () => void }) {
   const toast = useToast();
-  const { profile } = useAuth();
+  const { profile, supabase } = useAuth();
   const [drag, setDrag] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -87,11 +87,15 @@ function UploadZone({ onClose, onUploaded }: { onClose: () => void; onUploaded: 
     if (!files || files.length === 0) return;
     setUploading(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+
       for (const file of Array.from(files)) {
         const form = new FormData();
         form.append("file", file);
         if (profile?.departmentId) form.append("departmentId", profile.departmentId);
-        const res = await fetch("/api/ingest/upload", { method: "POST", body: form });
+        const res = await fetch("/api/ingest/upload", { method: "POST", body: form, headers });
         if (res.ok) {
           toast({ title: "Upload queued", body: `${file.name} — indexing started.`, tone: "blue", icon: <Icon.upload size={16} /> });
         } else {
