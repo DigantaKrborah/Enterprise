@@ -11,7 +11,7 @@ export interface EmbedResult {
 
 // Generate an embedding vector for a single text string.
 // Uses Ollama's nomic-embed-text model (768 dimensions).
-export async function embedText(text: string): Promise<EmbedResult> {
+export async function embedText(text: string, retries = 2): Promise<EmbedResult> {
   const start = Date.now();
 
   const res = await fetch(`${OLLAMA_BASE_URL}/api/embeddings`, {
@@ -23,6 +23,13 @@ export async function embedText(text: string): Promise<EmbedResult> {
 
   if (!res.ok) {
     const body = await res.text();
+    // Ollama returns 500 when the model is unloaded due to memory pressure.
+    // Wait 3s for it to reload, then retry up to `retries` times.
+    if (res.status === 500 && retries > 0) {
+      logger.warn("embedder", `Ollama model load failed — retrying in 3s (${retries} left)`, { model: EMBED_MODEL });
+      await new Promise((r) => setTimeout(r, 3000));
+      return embedText(text, retries - 1);
+    }
     throw new Error(`Ollama embeddings failed (${res.status}): ${body}`);
   }
 

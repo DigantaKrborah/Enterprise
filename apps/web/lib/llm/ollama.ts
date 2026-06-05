@@ -18,11 +18,17 @@ export async function streamOllamaChat(opts: {
   const { model, messages, onChunk, userId } = opts;
   const start = Date.now();
 
+  // Disable thinking mode for qwen3 — without this flag qwen3 emits
+  // <think>...</think> tokens for 2–3 minutes before answering.
+  const isQwen3 = model.startsWith("qwen3");
+  const body: Record<string, unknown> = { model, messages, stream: true };
+  if (isQwen3) body.think = false;
+
   const res = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages, stream: true }),
-    signal: AbortSignal.timeout(120_000),
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(180_000), // 3 min — generous for large context
   });
 
   if (!res.ok) {
@@ -47,7 +53,11 @@ export async function streamOllamaChat(opts: {
           eval_count?: number;
           prompt_eval_count?: number;
         };
-        if (json.message?.content) onChunk(json.message.content);
+        if (json.message?.content) {
+          // Strip thinking tokens if model emits them despite think:false
+          const text = json.message.content.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/<think>[\s\S]*/g, "");
+          if (text) onChunk(text);
+        }
         if (json.done) {
           totalTokens = (json.eval_count ?? 0) + (json.prompt_eval_count ?? 0);
         }
