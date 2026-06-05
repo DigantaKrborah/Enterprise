@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
-import { DOCS, USERS, LLMS, BUGS, HEALTH, User, LLM } from "@/lib/data";
+import React, { useState, useEffect } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,15 +42,107 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
+interface ApiUser {
+  id: string;
+  full_name: string | null;
+  email: string;
+  role: string;
+  department_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  departments: { id: string; name: string } | null;
+}
+
+interface LlmConfig {
+  defaultLlm: string;
+  complexThreshold: number;
+  ollamaModel: string;
+  claudeModel: string;
+  ollamaBaseUrl: string;
+  embedModel: string;
+}
+
+interface LlmStats {
+  totalLlmCalls: number;
+  totalTokens: number;
+  avgLatencyMs: number;
+  cacheHitRate: number;
+  modelBreakdown: Array<{ model: string; count: number }>;
+}
+
+interface BugReport {
+  number: number;
+  title: string;
+  state: string;
+  labels: Array<{ name: string }>;
+  html_url: string;
+  user: { login: string };
+  created_at: string;
+}
+
+interface HealthChecks {
+  supabase: { ok: boolean; latencyMs?: number };
+  elasticsearch: { ok: boolean; latencyMs?: number };
+  ollama: { ok: boolean };
+}
+
+interface HealthResponse {
+  ok: boolean;
+  checks: HealthChecks;
+}
+
+function toTitleCase(str: string): string {
+  return str
+    .replace(/_/g, " ")
+    .replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+}
+
 /* ── Users ── */
 function UsersTab() {
   const toast = useToast();
-  const [users, setUsers] = useState<User[]>(USERS);
-  const toggle = (id: string) => setUsers((us) => us.map((u) => u.id === id ? { ...u, active: !u.active } : u));
+  const [users, setUsers] = useState<ApiUser[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch("/api/admin/users");
+      const json = await res.json() as { data: ApiUser[] };
+      setUsers(json.data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void fetchUsers(); }, []);
+
+  const toggle = async (id: string) => {
+    const user = users.find((u) => u.id === id);
+    if (!user) return;
+    await fetch(`/api/admin/users/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: !user.is_active }),
+    });
+    await fetchUsers();
+  };
+
+  const inviteUser = async () => {
+    const email = window.prompt("Email:");
+    if (!email) return;
+    const res = await fetch("/api/auth/invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, fullName: "", role: "employee" }),
+    });
+    if (res.ok) {
+      toast({ title: "Invite sent", body: "An invitation email is on its way.", tone: "green" });
+    }
+  };
+
   return (
     <>
-      <PageHeader title="Users" sub={`${users.filter((u) => u.active).length} active · ${users.length} total`}>
-        <Button icon={<Icon.plus size={16} sw={2} />} onClick={() => toast({ title: "Invite sent", body: "An invitation email is on its way.", tone: "green" })}>Invite user</Button>
+      <PageHeader title="Users" sub={`${users.filter((u) => u.is_active).length} active · ${users.length} total`}>
+        <Button icon={<Icon.plus size={16} sw={2} />} onClick={() => { void inviteUser(); }}>Invite user</Button>
       </PageHeader>
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -59,22 +150,22 @@ function UsersTab() {
             <th style={{ ...thA, paddingLeft: 16 }}>User</th><th style={thA}>Role</th><th style={thA}>Department</th><th style={thA}>Last active</th><th style={{ ...thA, textAlign: "right", paddingRight: 16 }}>Active</th>
           </tr></thead>
           <tbody>
-            {users.map((u) => (
+            {!loading && users.map((u) => (
               <tr key={u.id} className="doc-row" style={{ borderTop: "1px solid var(--border)" }}>
                 <td style={{ ...tdA, paddingLeft: 16 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-                    <Avatar name={u.name} size={32} />
+                    <Avatar name={u.full_name ?? u.email} size={32} />
                     <div>
-                      <div style={{ fontSize: 13.3, fontWeight: 550 }}>{u.name}</div>
+                      <div style={{ fontSize: 13.3, fontWeight: 550 }}>{u.full_name ?? u.email}</div>
                       <div style={{ fontSize: 11.5, color: "var(--text-faint)" }} className="mono">{u.email}</div>
                     </div>
                   </div>
                 </td>
-                <td style={tdA}><Badge tone={u.role === "Admin" ? "violet" : "gray"}>{u.role}</Badge></td>
-                <td style={{ ...tdA, color: "var(--text-1)" }}>{u.dept}</td>
-                <td style={{ ...tdA, color: "var(--text-muted)" }}>{u.last}</td>
+                <td style={tdA}><Badge tone={u.role === "super_admin" || u.role === "admin" ? "violet" : "gray"}>{toTitleCase(u.role)}</Badge></td>
+                <td style={{ ...tdA, color: "var(--text-1)" }}>{u.departments?.name ?? "—"}</td>
+                <td style={{ ...tdA, color: "var(--text-muted)" }}>{new Date(u.created_at).toLocaleDateString()}</td>
                 <td style={{ ...tdA, textAlign: "right", paddingRight: 16 }}>
-                  <div style={{ display: "inline-flex" }}><Switch checked={u.active} onChange={() => toggle(u.id)} /></div>
+                  <div style={{ display: "inline-flex" }}><Switch checked={u.is_active} onChange={() => { void toggle(u.id); }} /></div>
                 </td>
               </tr>
             ))}
@@ -87,10 +178,41 @@ function UsersTab() {
 
 /* ── Departments ── */
 function DeptsTab() {
-  const depts = [
-    { name: "Operations", users: 4, docs: DOCS.filter((d) => d.dept === "Operations").length, color: "var(--blue)" },
-    { name: "HR",         users: 2, docs: DOCS.filter((d) => d.dept === "HR").length,         color: "var(--violet)" },
-  ];
+  const [users, setUsers] = useState<ApiUser[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/admin/users");
+      const json = await res.json() as { data: ApiUser[] };
+      setUsers(json.data);
+    })();
+  }, []);
+
+  const deptMap = new Map<string, { name: string; count: number }>();
+  for (const u of users) {
+    if (u.departments) {
+      const existing = deptMap.get(u.departments.id);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        deptMap.set(u.departments.id, { name: u.departments.name, count: 1 });
+      }
+    }
+  }
+
+  const DEPT_COLORS: Record<string, string> = {
+    Operations: "var(--blue)",
+    HR: "var(--violet)",
+  };
+  const DEFAULT_COLOR = "var(--green)";
+
+  const depts = Array.from(deptMap.values()).map((d) => ({
+    name: d.name,
+    users: d.count,
+    docs: 0,
+    color: DEPT_COLORS[d.name] ?? DEFAULT_COLOR,
+  }));
+
   return (
     <>
       <PageHeader title="Departments" sub="Access scopes that segment documents and conversations">
@@ -117,9 +239,49 @@ function DeptsTab() {
 /* ── LLM Config ── */
 function LLMTab() {
   const toast = useToast();
-  const [llms, setLlms] = useState<LLM[]>(LLMS);
-  const toggle = (id: string) => setLlms((ls) => ls.map((l) => l.id === id ? { ...l, active: !l.active } : l));
-  const setBudget = (id: string, v: number) => setLlms((ls) => ls.map((l) => l.id === id ? { ...l, budget: v } : l));
+  const [config, setConfig] = useState<LlmConfig | null>(null);
+  const [stats, setStats] = useState<LlmStats | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const [cfgRes, statsRes] = await Promise.all([
+        fetch("/api/admin/llm-config"),
+        fetch("/api/admin/stats"),
+      ]);
+      const cfgJson = await cfgRes.json() as { data: LlmConfig };
+      const statsJson = await statsRes.json() as { data: LlmStats };
+      setConfig(cfgJson.data);
+      setStats(statsJson.data);
+    })();
+  }, []);
+
+  const llms = config
+    ? [
+        {
+          id: "ollama",
+          name: "Ollama",
+          tag: "On-prem",
+          model: config.ollamaModel,
+          host: config.ollamaBaseUrl,
+          desc: "Local open-source model served via Ollama. Zero data egress.",
+          active: true,
+          calls: stats?.totalLlmCalls ?? 0,
+          tokens: stats?.totalTokens ?? 0,
+        },
+        {
+          id: "claude",
+          name: "Anthropic Claude",
+          tag: "Cloud",
+          model: config.claudeModel,
+          host: "api.anthropic.com",
+          desc: "Cloud LLM used for complex queries above the routing threshold.",
+          active: true,
+          calls: stats?.totalLlmCalls ?? 0,
+          tokens: stats?.totalTokens ?? 0,
+        },
+      ]
+    : [];
+
   return (
     <>
       <PageHeader title="LLM Configuration" sub="Toggle providers and set per-request token budgets" />
@@ -140,15 +302,13 @@ function LLMTab() {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: l.active ? "var(--green)" : "var(--text-faint)" }}>{l.active ? "Active" : "Inactive"}</span>
-                <Switch checked={l.active} onChange={() => toggle(l.id)} />
               </div>
             </div>
             <div className="divider" style={{ margin: "16px 0 14px" }} />
             <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <label style={{ fontSize: 12.5, color: "var(--text-1)", fontWeight: 550 }}>Token budget</label>
-                <input className="field tnum" style={{ width: 110, height: 34, fontSize: 13 }} type="number" value={l.budget} onChange={(e) => setBudget(l.id, +e.target.value)} disabled={!l.active} />
-                <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>tokens / request</span>
+              <div style={{ display: "flex", gap: 24 }}>
+                <Stat label="Total Calls" value={l.calls} />
+                <Stat label="Total Tokens" value={l.tokens} />
               </div>
               <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "var(--text-faint)" }}>
                 <Icon.shield size={13} /> {l.host}
@@ -158,7 +318,7 @@ function LLMTab() {
         ))}
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}>
-        <Button onClick={() => toast({ title: "Configuration saved", body: "LLM routing updated for all departments.", tone: "green" })}>Save changes</Button>
+        <Button onClick={() => toast({ title: "Changes require environment variable update", body: "Update your .env file and restart the service to apply LLM config changes.", tone: "blue" })}>Save changes</Button>
       </div>
     </>
   );
@@ -166,12 +326,45 @@ function LLMTab() {
 
 /* ── Bug Reports ── */
 function BugsTab() {
+  const [bugs, setBugs] = useState<BugReport[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/admin/bug-reports");
+        const json = await res.json() as { data: BugReport[] };
+        setBugs(json.data);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
   const sevTone: Record<string, "red" | "amber" | "gray"> = { Critical: "red", High: "red", Medium: "amber", Low: "gray" };
-  const statusTone: Record<string, "blue" | "amber" | "green"> = { Open: "blue", "In progress": "amber", Closed: "green" };
+  const statusTone: Record<string, "blue" | "green"> = { open: "blue", closed: "green" };
+
+  const getSeverity = (labels: Array<{ name: string }>): string => {
+    for (const l of labels) {
+      const lower = l.name.toLowerCase();
+      if (lower.includes("critical")) return "Critical";
+      if (lower.includes("high")) return "High";
+      if (lower.includes("medium")) return "Medium";
+      if (lower.includes("low")) return "Low";
+    }
+    return "Medium";
+  };
+
   return (
     <>
       <PageHeader title="Bug Reports" sub="Synced with the GitHub issue tracker">
-        <a href="#" onClick={(e) => e.preventDefault()} className="btn btn-ghost btn-sm" style={{ gap: 6, textDecoration: "none" }}>
+        <a
+          href="https://github.com/DigantaKrborah/Enterprise/issues"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn btn-ghost btn-sm"
+          style={{ gap: 6, textDecoration: "none" }}
+        >
           <Icon.ext size={14} /> View on GitHub
         </a>
       </PageHeader>
@@ -181,20 +374,24 @@ function BugsTab() {
             <th style={{ ...thA, paddingLeft: 16 }}>Issue</th><th style={thA}>Severity</th><th style={thA}>Status</th><th style={thA}>Reporter</th><th style={thA}>Date</th>
           </tr></thead>
           <tbody>
-            {BUGS.map((b) => (
-              <tr key={b.id} className="doc-row" style={{ borderTop: "1px solid var(--border)", cursor: "pointer" }}>
-                <td style={{ ...tdA, paddingLeft: 16 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span className="mono" style={{ fontSize: 11.5, color: "var(--blue-bright)", fontWeight: 600 }}>{b.id}</span>
-                    <span style={{ fontSize: 13.2, color: "var(--text-1)" }}>{b.title}</span>
-                  </div>
-                </td>
-                <td style={tdA}><Badge tone={sevTone[b.sev]}>{b.sev}</Badge></td>
-                <td style={tdA}><Badge tone={statusTone[b.status]}>{b.status}</Badge></td>
-                <td style={{ ...tdA, color: "var(--text-1)" }}>{b.by}</td>
-                <td style={{ ...tdA, color: "var(--text-muted)" }} className="tnum">{b.date}</td>
-              </tr>
-            ))}
+            {!loading && bugs.map((b) => {
+              const sev = getSeverity(b.labels);
+              const statusLabel = b.state === "open" ? "Open" : "Closed";
+              return (
+                <tr key={b.number} className="doc-row" style={{ borderTop: "1px solid var(--border)", cursor: "pointer" }} onClick={() => window.open(b.html_url, "_blank")}>
+                  <td style={{ ...tdA, paddingLeft: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span className="mono" style={{ fontSize: 11.5, color: "var(--blue-bright)", fontWeight: 600 }}>{`ISS-${b.number}`}</span>
+                      <span style={{ fontSize: 13.2, color: "var(--text-1)" }}>{b.title}</span>
+                    </div>
+                  </td>
+                  <td style={tdA}><Badge tone={sevTone[sev]}>{sev}</Badge></td>
+                  <td style={tdA}><Badge tone={statusTone[b.state] ?? "gray"}>{statusLabel}</Badge></td>
+                  <td style={{ ...tdA, color: "var(--text-1)" }}>{b.user.login}</td>
+                  <td style={{ ...tdA, color: "var(--text-muted)" }} className="tnum">{new Date(b.created_at).toLocaleDateString()}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -204,14 +401,59 @@ function BugsTab() {
 
 /* ── System Health ── */
 function HealthTab() {
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+
+  const fetchHealth = async () => {
+    try {
+      const res = await fetch("/api/health");
+      const json = await res.json() as HealthResponse;
+      setHealth(json);
+    } catch { /* non-fatal */ }
+  };
+
+  useEffect(() => {
+    void fetchHealth();
+    const interval = setInterval(() => { void fetchHealth(); }, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const services: Array<{ name: string; ok: boolean; latencyMs?: number; detail: string }> = health
+    ? [
+        {
+          name: "Supabase",
+          ok: health.checks.supabase.ok,
+          latencyMs: health.checks.supabase.latencyMs,
+          detail: "PostgreSQL + pgvector database",
+        },
+        {
+          name: "Elasticsearch",
+          ok: health.checks.elasticsearch.ok,
+          latencyMs: health.checks.elasticsearch.latencyMs,
+          detail: "Full-text and hybrid search index",
+        },
+        {
+          name: "Ollama",
+          ok: health.checks.ollama.ok,
+          latencyMs: undefined,
+          detail: "Local LLM inference server",
+        },
+        {
+          name: "Embedding worker",
+          ok: health.checks.ollama.ok,
+          latencyMs: undefined,
+          detail: "nomic-embed-text via Ollama",
+        },
+      ]
+    : [];
+
   return (
     <>
       <PageHeader title="System Health" sub="Last checked — auto-refresh 30s">
-        <Button variant="ghost" icon={<Icon.refresh size={15} />}>Refresh</Button>
+        <Button variant="ghost" icon={<Icon.refresh size={15} />} onClick={() => { void fetchHealth(); }}>Refresh</Button>
       </PageHeader>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
-        {HEALTH.map((h) => {
-          const ok = h.status === "ok";
+        {services.map((h) => {
+          const ok = h.ok;
           const color = ok ? "var(--green)" : "var(--amber)";
           return (
             <div key={h.name} className="card" style={{ padding: 17 }}>
@@ -225,8 +467,12 @@ function HealthTab() {
               <p style={{ margin: "0 0 14px", fontSize: 12.5, color: "var(--text-muted)" }}>{h.detail}</p>
               <div className="divider" />
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12 }}>
-                <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>{h.meta}</span>
-                {h.latency !== "—" && <span className="mono" style={{ fontSize: 11.5, color: "var(--text-1)" }}>{h.latency}</span>}
+                <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>
+                  {health ? new Date().toLocaleTimeString() : "—"}
+                </span>
+                {h.latencyMs !== undefined && (
+                  <span className="mono" style={{ fontSize: 11.5, color: "var(--text-1)" }}>{h.latencyMs}ms</span>
+                )}
               </div>
             </div>
           );

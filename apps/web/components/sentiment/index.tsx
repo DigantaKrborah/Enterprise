@@ -7,20 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { Skel } from "@/components/ui/skeleton";
 
-const SENTIMENT_RESULT = {
-  sentiment: "Negative",
-  tone: "Concerned & constructive",
-  confidence: 0.87,
-  summary: "The message expresses genuine frustration about recurring scheduling decisions affecting the night crew, but the tone stays professional and solution-oriented. The author signals risk of attrition while explicitly offering to help, indicating an escalation intended to prompt action rather than to vent.",
-  scores: [
-    { label: "Frustration",    value: 0.78, color: "var(--red)" },
-    { label: "Urgency",        value: 0.71, color: "var(--amber)" },
-    { label: "Constructiveness", value: 0.64, color: "var(--green)" },
-  ],
-  entities: [
-    { t: "person", v: "Kwame" }, { t: "date", v: "June 15th" }, { t: "team", v: "Night crew" },
-    { t: "action", v: "Transfer requests" }, { t: "doc", v: "Q3 shift rotation" }, { t: "metric", v: "6 consecutive shifts" },
-  ],
+type SentimentResultType = {
+  sentiment: "Positive" | "Negative" | "Neutral";
+  tone: string;
+  confidence: number;
+  summary: string;
+  scores: Array<{ label: string; value: number; color: string }>;
+  entities: Array<{ t: string; v: string }>;
 };
 
 function PageHeader({ title, sub, children }: { title: string; sub?: string; children?: React.ReactNode }) {
@@ -85,7 +78,7 @@ function ResultSkeleton() {
   );
 }
 
-function ResultPanel({ r }: { r: typeof SENTIMENT_RESULT }) {
+function ResultPanel({ r }: { r: SentimentResultType }) {
   const tone = r.sentiment === "Negative" ? "red" : r.sentiment === "Positive" ? "green" : "amber";
   return (
     <div className="card fade-up" style={{ padding: 18 }}>
@@ -128,11 +121,24 @@ function ResultPanel({ r }: { r: typeof SENTIMENT_RESULT }) {
 export function SentimentPage() {
   const [text, setText] = useState("");
   const [state, setState] = useState<"idle" | "analyzing" | "done">("idle");
+  const [result, setResult] = useState<SentimentResultType | null>(null);
 
-  const analyze = () => {
+  const analyze = async () => {
     if (!text.trim()) return;
     setState("analyzing");
-    setTimeout(() => setState("done"), 1500);
+    try {
+      const res = await fetch("/api/sentiment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error("Analysis failed");
+      const json = await res.json() as { data: SentimentResultType };
+      setResult(json.data);
+      setState("done");
+    } catch {
+      setState("idle");
+    }
   };
 
   return (
@@ -160,7 +166,7 @@ export function SentimentPage() {
           <div style={{ minHeight: 360 }}>
             {state === "idle" && <ResultEmpty />}
             {state === "analyzing" && <ResultSkeleton />}
-            {state === "done" && <ResultPanel r={SENTIMENT_RESULT} />}
+            {state === "done" && result && <ResultPanel r={result} />}
           </div>
         </div>
       </div>
