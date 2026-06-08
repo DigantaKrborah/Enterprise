@@ -74,7 +74,7 @@ export async function POST(
   const body = await request.json() as { content?: string; departmentFilter?: string };
   if (!body.content?.trim()) return badRequest("content is required");
 
-  const query = body.content.trim();
+  const rawQuery = body.content.trim();
   const supabase = createClient();
   const admin    = getAdminClient();
 
@@ -89,17 +89,20 @@ export async function POST(
 
   const deptFilter = body.departmentFilter ?? conv.department_filter ?? user!.departmentId;
 
-  // PII scan on user query — log but do not block
-  const { hasPII } = scanAndMaskPII(query);
+  // Scan and mask PII in the raw query — masked version goes to the LLM,
+  // raw version (without PII) is saved as the display message.
+  const { maskedText: query, hasPII } = scanAndMaskPII(rawQuery);
   if (hasPII) {
-    logger.warn("rag_agent", "PII detected in user query", { conversationId: params.id }, user!.id);
+    logger.warn("rag_agent", "PII detected in user query — masked before LLM", {
+      conversationId: params.id,
+    }, user!.id);
   }
 
-  // Save user message immediately
+  // Save the raw (user-facing) message — not the masked version.
   const { data: userMsg } = await admin.from("messages").insert({
     conversation_id: params.id,
     role:            "user",
-    content:         query,
+    content:         rawQuery,
   }).select("id").single();
 
   // Auto-title the conversation on first message
@@ -128,7 +131,12 @@ export async function POST(
     // Continue with empty context — LLM will say it has no information
   }
 
-  const contextBlock = buildContextBlock(chunks);
+  // Cap context to ~6 000 tokens (≈24 000 chars) to stay within local model limits.
+  // Chunks are already ranked by relevance, so truncation drops the weakest tail.
+  const RAW_CONTEXT = buildContextBlock(chunks);
+  const contextBlock = RAW_CONTEXT.length > 24_000
+    ? RAW_CONTEXT.slice(0, 24_000) + "\n\n[Context truncated to fit model window]"
+    : RAW_CONTEXT;
 
   // ── LLM routing ──────────────────────────────────────────────────────────────
   const { provider, model, reason } = routeLLM({
@@ -229,3 +237,5 @@ export async function POST(
 
   return new Response(stream, { headers: SSE_HEADERS });
 }
+
+export async function generateStaticParams() { return []; }

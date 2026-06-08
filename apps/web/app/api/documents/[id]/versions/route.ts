@@ -41,3 +41,5 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
   return NextResponse.json({ data: versions ?? [] });
 }
+
+export async function generateStaticParams() { return []; }

@@ -35,3 +35,5 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   return NextResponse.json({ ok: true });
 }
+
+export async function generateStaticParams() { return []; }

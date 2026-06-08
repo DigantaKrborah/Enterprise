@@ -87,15 +87,44 @@ function UploadZone({ onClose, onUploaded }: { onClose: () => void; onUploaded: 
     if (!files || files.length === 0) return;
     setUploading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+      // Primary: read access token from browser cookies directly
+      // (createBrowserClient stores session as sb-<ref>-auth-token cookie)
+      const accessToken = await (async () => {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+        const ref = supabaseUrl.match(/https?:\/\/([^.]+)\./)?.[1];
+        if (ref) {
+          const base = `sb-${ref}-auth-token`;
+          const all = document.cookie.split(";").map(c => c.trim());
+          const findCookie = (name: string) => {
+            const entry = all.find(c => c.startsWith(name + "="));
+            return entry ? entry.slice(name.length + 1) : null;
+          };
+          const single = findCookie(base);
+          if (single) {
+            try { const t = JSON.parse(decodeURIComponent(single)).access_token; if (t) return t; } catch {}
+          }
+          // Chunked cookies: join raw values then decode once
+          const chunks: string[] = [];
+          for (let i = 0; ; i++) {
+            const chunk = findCookie(`${base}.${i}`);
+            if (!chunk) break;
+            chunks.push(chunk);
+          }
+          if (chunks.length) {
+            try { const t = JSON.parse(decodeURIComponent(chunks.join(""))).access_token; if (t) return t; } catch {}
+          }
+        }
+        // Fallback: supabase client getSession
+        const { data: { session } } = await supabase.auth.getSession();
+        return session?.access_token ?? null;
+      })();
 
       for (const file of Array.from(files)) {
         const form = new FormData();
         form.append("file", file);
         if (profile?.departmentId) form.append("departmentId", profile.departmentId);
-        const res = await fetch("/api/ingest/upload", { method: "POST", body: form, headers });
+        if (accessToken) form.append("__token", accessToken);
+        const res = await fetch("/api/ingest/upload", { method: "POST", body: form });
         if (res.ok) {
           toast({ title: "Upload queued", body: `${file.name} — indexing started.`, tone: "blue", icon: <Icon.upload size={16} /> });
         } else {

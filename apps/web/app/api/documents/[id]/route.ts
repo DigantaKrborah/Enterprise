@@ -93,3 +93,5 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 
   return NextResponse.json({ ok: true });
 }
+
+export async function generateStaticParams() { return []; }

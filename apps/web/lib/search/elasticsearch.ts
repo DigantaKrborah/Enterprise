@@ -91,6 +91,10 @@ export interface ESSearchResult {
   score:      number;
   docName:    string;
   pageNumber: number | null;
+  deptId:     string;
+  version:    number;
+  chunkIndex: number;
+  source:     "keyword";
 }
 
 export async function keywordSearch(
@@ -123,6 +127,10 @@ export async function keywordSearch(
     score:      h._score,
     docName:    h._source.doc_name as string,
     pageNumber: h._source.page_number as number | null,
+    deptId:     (h._source.department_id as string) ?? "",
+    version:    (h._source.version as number) ?? 1,
+    chunkIndex: 0,
+    source:     "keyword" as const,
   }));
 }
 
