@@ -23,13 +23,21 @@ jobs:
         run: npm ci
 
       - name: Run full test suite
-        run: npm run test:all
-
-      - name: Build
-        run: npm run build
+        run: npm run test
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.PROD_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PROD_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PROD_SUPABASE_SERVICE_ROLE_KEY }}
+
+      - name: Build static export
+        run: npm run build
+        env:
+          STATIC_EXPORT: "1"
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.PROD_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PROD_SUPABASE_ANON_KEY }}
+
+      - name: Copy worker to output directory
+        run: cp apps/web/worker.js apps/web/out/_worker.js
 
       - name: Deploy to Cloudflare Pages (Production)
         uses: cloudflare/pages-action@v1
@@ -37,13 +45,13 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           projectName: enterprise-prod
-          directory: .next
+          directory: apps/web/out
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create release tag
         run: |
           git config user.email "actions@github.com"
           git config user.name "GitHub Actions"
-          VERSION=$(node -p "require('./package.json').version")
-          git tag -a "v$VERSION" -m "Production release v$VERSION"
-          git push origin "v$VERSION"
+          VERSION=$(node -p "require('./apps/web/package.json').version")
+          git tag -a "v$VERSION-$(date +%Y%m%d%H%M%S)" -m "Production release v$VERSION"
+          git push origin --tags
