@@ -39,14 +39,11 @@ jobs:
       - name: Copy worker to output directory
         run: cp apps/web/worker.js apps/web/out/_worker.js
 
-      - name: Deploy to Cloudflare Pages (Production)
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: enterprise-nrl-ragbot
-          directory: apps/web/out
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+      - name: Deploy to Cloudflare Pages
+        run: npx wrangler pages deploy apps/web/out --project-name=enterprise-nrl-ragbot --commit-dirty=true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Create release tag
         run: |
