@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+export const revalidate = 0;
 import { requireAuth } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { getAdminClient } from "@/lib/supabase/admin";
@@ -94,4 +94,3 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   return NextResponse.json({ ok: true });
 }
 
-export async function generateStaticParams() { return []; }

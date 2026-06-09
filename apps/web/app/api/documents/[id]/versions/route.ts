@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+export const revalidate = 0;
 import { requireAuth } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
@@ -42,4 +42,3 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   return NextResponse.json({ data: versions ?? [] });
 }
 
-export async function generateStaticParams() { return []; }

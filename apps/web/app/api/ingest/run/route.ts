@@ -1,3 +1,4 @@
+export const revalidate = 0;
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { runIngestAgent } from "@/lib/agents/ingest-agent";

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+export const revalidate = 0;
 import { requireAuth } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { getAdminClient } from "@/lib/supabase/admin";
@@ -238,4 +238,3 @@ export async function POST(
   return new Response(stream, { headers: SSE_HEADERS });
 }
 
-export async function generateStaticParams() { return []; }

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+export const revalidate = 0;
 import { requireAuth } from "@/lib/rbac";
 import type { Role } from "@/lib/rbac";
 import { getAdminClient } from "@/lib/supabase/admin";
@@ -36,4 +36,3 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   return NextResponse.json({ ok: true });
 }
 
-export async function generateStaticParams() { return []; }

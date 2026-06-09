@@ -1,3 +1,4 @@
+export const revalidate = 0;
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, hasRole, type Role } from "@/lib/rbac";
 import { getAdminClient } from "@/lib/supabase/admin";

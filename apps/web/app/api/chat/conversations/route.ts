@@ -1,3 +1,4 @@
+export const revalidate = 0;
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";

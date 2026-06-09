@@ -44,7 +44,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: enterprise-prod
+          projectName: enterprise-nrl-ragbot
           directory: apps/web/out
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
